@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Chat App</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Background animated gradient -->
+    <div class="background-animation"></div>
+    
+    <div class="container">
+        <!-- Login Screen -->
+        <div id="login-screen" class="screen">
+            <div class="login-box">
+                <div class="logo-container">
+                    <img src="https://pub-eb8df8ce05ba4243b626e4a16b3fd69b.r2.dev/yapchatlogo.png" alt="YapChat Logo" class="logo">
+                    <h1>YapChat</h1>
+                </div>
+                <p class="subtitle">Where conversations never stop</p>
+                <p class="description">Join thousands of users yapping in real-time! Share your ideas, make new friends, and connect globally on a fun, fast, and secure chat platform designed for nonstop conversation.</p>
+                <div class="input-group">
+                    <input type="text" id="username-input" placeholder="Enter your name" maxlength="20" autofocus>
+                    <button id="join-btn" class="btn-primary">
+                        <span>Join Chat</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="features">
+                    <div class="feature-item">
+                        <span class="feature-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+                                <circle cx="12" cy="16" r="1"/>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                            </svg>
+                        </span>
+                        <div class="feature-content">
+                            <strong>Secure</strong>
+                            <span class="feature-desc">End-to-end encrypted</span>
+                        </div>
+                    </div>
+
+                    <div class="feature-item">
+                        <span class="feature-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+                                <path d="M2 12h20"/>
+                            </svg>
+                        </span>
+                        <div class="feature-content">
+                            <strong>Global</strong>
+                            <span class="feature-desc">Chat anywhere, anytime</span>
+                        </div>
+                    </div>
+
+                    <div class="feature-item">
+                        <span class="feature-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect width="14" height="20" x="5" y="2" rx="2" ry="2"/>
+                                <path d="M12 18h.01"/>
+                            </svg>
+                        </span>
+                        <div class="feature-content">
+                            <strong>Mobile</strong>
+                            <span class="feature-desc">Works on all devices</span>
+                        </div>
+                    </div>
+
+                    <div class="feature-item">
+                        <span class="feature-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/>
+                            </svg>
+                        </span>
+                        <div class="feature-content">
+                            <strong>Fast</strong>
+                            <span class="feature-desc">Instant real-time messaging</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Chat Screen -->
+        <div id="chat-screen" class="screen hidden">
+            <div class="chat-wrapper">
+                <div class="chat-header">
+                    <div class="header-left">
+                        <div class="logo-small">💬</div>
+                        <div class="header-info">
+                            <h2>Go Chat</h2>
+                            <span class="status-indicator">
+                                <span class="status-dot"></span>
+                                <span id="online-count">Online</span>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="user-info">
+                        <div class="user-avatar" id="user-avatar"></div>
+                        <span id="current-user"></span>
+                        <button id="leave-btn" class="leave-btn">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Leave
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="chat-container">
+                    <div id="messages" class="messages"></div>
+                    <div id="typing-indicator" class="typing-indicator hidden">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+                
+                <div class="input-container">
+                    <div class="emoji-picker hidden" id="emoji-picker">
+                        <div class="emoji-categories">
+                            <button class="emoji-category active" data-category="smileys">😊</button>
+                            <button class="emoji-category" data-category="gestures">👋</button>
+                            <button class="emoji-category" data-category="animals">🐶</button>
+                            <button class="emoji-category" data-category="food">🍕</button>
+                            <button class="emoji-category" data-category="travel">✈️</button>
+                            <button class="emoji-category" data-category="objects">📱</button>
+                            <button class="emoji-category" data-category="symbols">❤️</button>
+                        </div>
+                        <div class="emoji-grid" id="emoji-grid">
+                            <!-- Emojis will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    <div class="input-row">
+                        <button id="emoji-btn" class="emoji-btn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                                <line x1="9" y1="9" x2="9.01" y2="9"/>
+                                <line x1="15" y1="9" x2="15.01" y2="9"/>
+                            </svg>
+                        </button>
+                        <input type="file" id="image-input" accept="image/*" style="display: none;">
+                        <button id="image-btn" class="emoji-btn" title="Send image">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <circle cx="8.5" cy="8.5" r="1.5"/>
+                                <polyline points="21 15 16 10 5 21"/>
+                            </svg>
+                        </button>
+                        <input type="text" id="message-input" placeholder="Type your message..." maxlength="500">
+                        <button id="send-btn" class="send-btn">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="image-preview" class="image-preview hidden"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
