@@ -4,7 +4,7 @@ let replyingTo = null; // ID of message being replied to
 let editingMessageId = null; // ID of message being edited
 let messages = new Map(); // Store messages by ID
 
-// DOM Elements
+//
 const loginScreen = document.getElementById('login-screen');
 const chatScreen = document.getElementById('chat-screen');
 const usernameInput = document.getElementById('username-input');
@@ -35,7 +35,7 @@ messageInput.addEventListener('keypress', (e) => {
 
 leaveBtn.addEventListener('click', leaveChat);
 
-// Image upload functionality
+// Image upload 
 if (imageBtn && imageInput) {
     imageBtn.addEventListener('click', () => {
         imageInput.click();
@@ -49,7 +49,7 @@ if (imageBtn && imageInput) {
     });
 }
 
-// Emoji functionality - initialize when available
+// Emoji functionality 
 function initEmojiPicker() {
     const btn = document.getElementById('emoji-btn');
     const picker = document.getElementById('emoji-picker');
@@ -60,7 +60,7 @@ function initEmojiPicker() {
         return false;
     }
     
-    // Only add listener if not already added
+    
     if (!btn.hasAttribute('data-emoji-initialized')) {
         btn.setAttribute('data-emoji-initialized', 'true');
         btn.addEventListener('click', (e) => {
@@ -70,7 +70,7 @@ function initEmojiPicker() {
         });
     }
     
-    // Initialize emoji picker if not already done
+
     if (!grid.hasAttribute('data-emoji-initialized')) {
         grid.setAttribute('data-emoji-initialized', 'true');
         initializeEmojis();
@@ -79,14 +79,14 @@ function initEmojiPicker() {
     return true;
 }
 
-// Try to initialize immediately, or wait for DOM
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initEmojiPicker);
 } else {
     initEmojiPicker();
 }
 
-// Also try when chat screen becomes visible
+
 const chatScreenObserver = new MutationObserver(() => {
     if (!chatScreen.classList.contains('hidden') && emojiPicker && emojiPicker.classList.contains('hidden')) {
         if (!emojiGrid.innerHTML) {
@@ -129,7 +129,7 @@ function joinChat() {
             initEmojiPicker();
         }, 100);
         
-        // Set user avatar with first letter
+        // Set user avatar wit first letter of userbame
         const userAvatar = document.getElementById('user-avatar');
         userAvatar.textContent = username.charAt(0).toUpperCase();
         
@@ -139,7 +139,7 @@ function joinChat() {
             headerTitle.textContent = username;
         }
         
-        // Create proper header structure for avatar + name on top, status below
+       
         const headerInfo = document.querySelector('.header-info');
         if (headerInfo && userAvatar) {
             // Create wrapper for avatar and name
@@ -149,7 +149,7 @@ function joinChat() {
             // Move avatar to the new wrapper
             headerTop.appendChild(userAvatar);
             
-            // Move the h2 (name) to the wrapper
+        
             const nameElement = headerInfo.querySelector('h2');
             if (nameElement) {
                 headerTop.appendChild(nameElement);
@@ -176,7 +176,7 @@ function joinChat() {
             // Not JSON, continue to check old format
         }
         
-        // Check if it's the old format with JSON inside (e.g., "[user]: {...}")
+    
         const oldFormatMatch = data.match(/^\[(.+?)\]:\s*(.+)$/);
         if (oldFormatMatch) {
             const author = oldFormatMatch[1];
@@ -210,7 +210,7 @@ function joinChat() {
             return;
         }
         
-        // Check if it's a system message (old format)
+       
         if (data.startsWith('***') && data.endsWith('***')) {
             const systemMsg = {
                 id: 'sys_' + Date.now(),
@@ -286,7 +286,7 @@ function sendMessage() {
 }
 
 function handleImageSelect(file) {
-    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+    if (file.size > 10 * 1024 * 1024) { // 10mB limit
         alert('Image is too large. Please select an image smaller than 10MB.');
         return;
     }
@@ -462,7 +462,7 @@ function displayUserMessage(msg) {
         replyContent.textContent = msg.replyToContent;
         replyPreview.appendChild(replyContent);
         
-        // Add arrow indicator
+        // arrow indicator
         const arrowIcon = document.createElement('span');
         arrowIcon.classList.add('reply-arrow');
         arrowIcon.innerHTML = '↗';
@@ -844,7 +844,7 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
-// Emoji picker functionality - Expanded with many more emojis
+
 const emojiCategories = {
     smileys: ['😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '🫠', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '☺️', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🫢', '🫣', '🤫', '🤔', '🫡', '🤐', '🤨', '😐', '😑', '😶', '🫥', '😏', '😒', '🙄', '😬', '🤥', '🫨', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '😶‍🌫️', '😵', '😵‍💫', '🤯', '🤠', '🥳', '🥸', '😎', '🤓', '🧐', '😕', '😟', '🙁', '☹️', '😮', '😯', '😲', '😳', '🥺', '😦', '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣', '😞', '😓', '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡', '👹', '👺', '👻', '👽', '👾', '🤖', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾'],
     gestures: ['👋', '🤚', '🖐️', '✋', '🖖', '🫱', '🫲', '🫳', '🫴', '👌', '🤌', '🤏', '✌️', '🤞', '🫰', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️', '🫵', '👍', '👎', '👊', '✊', '🤛', '🤜', '👏', '🙌', '🫶', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻', '👃', '🧠', '🫀', '🫁', '🦷', '🦴', '👀', '👁️', '👅', '👄', '🫦', '👶', '🧒', '👦', '👧', '🧑', '👱', '👨', '🧔', '👨‍🦰', '👨‍🦱', '👨‍🦳', '👨‍🦲', '👩', '👩‍🦰', '🧑‍🦰', '👩‍🦱', '🧑‍🦱', '👩‍🦳', '🧑‍🦳', '👩‍🦲', '🧑‍🦲', '👱‍♀️', '👱‍♂️', '🧓', '👴', '👵', '🙍', '🙍‍♂️', '🙍‍♀️', '🙎', '🙎‍♂️', '🙎‍♀️', '🙅', '🙅‍♂️', '🙅‍♀️', '🙆', '🙆‍♂️', '🙆‍♀️', '💁', '💁‍♂️', '💁‍♀️', '🙋', '🙋‍♂️', '🙋‍♀️', '🧏', '🧏‍♂️', '🧏‍♀️', '🤦', '🤦‍♂️', '🤦‍♀️', '🤷', '🤷‍♂️', '🤷‍♀️', '🧑‍⚕️', '👨‍⚕️', '👩‍⚕️', '🧑‍🎓', '👨‍🎓', '👩‍🎓', '🧑‍🏫', '👨‍🏫', '👩‍🏫', '🧑‍⚖️', '👨‍⚖️', '👩‍⚖️', '🧑‍🌾', '👨‍🌾', '👩‍🌾', '🧑‍🍳', '👨‍🍳', '👩‍🍳', '🧑‍🔧', '👨‍🔧', '👩‍🔧', '🧑‍🏭', '👨‍🏭', '👩‍🏭', '🧑‍💼', '👨‍💼', '👩‍💼', '🧑‍🔬', '👨‍🔬', '👩‍🔬', '🧑‍💻', '👨‍💻', '👩‍💻', '🧑‍🎤', '👨‍🎤', '👩‍🎤', '🧑‍🎨', '👨‍🎨', '👩‍🎨', '🧑‍✈️', '👨‍✈️', '👩‍✈️', '🧑‍🚀', '👨‍🚀', '👩‍🚀', '🧑‍🚒', '👨‍🚒', '👩‍🚒', '👮', '👮‍♂️', '👮‍♀️', '🕵️', '🕵️‍♂️', '🕵️‍♀️', '💂', '💂‍♂️', '💂‍♀️', '🥷', '👷', '👷‍♂️', '👷‍♀️', '🤴', '👸', '👳', '👳‍♂️', '👳‍♀️', '👲', '🧕', '🤵', '🤵‍♂️', '🤵‍♀️', '👰', '👰‍♂️', '👰‍♀️', '🤰', '🤱', '👼', '🎅', '🤶', '🦸', '🦸‍♂️', '🦸‍♀️', '🦹', '🦹‍♂️', '🦹‍♀️', '🧙', '🧙‍♂️', '🧙‍♀️', '🧚', '🧚‍♂️', '🧚‍♀️', '🧛', '🧛‍♂️', '🧛‍♀️', '🧜', '🧜‍♂️', '🧜‍♀️', '🧝', '🧝‍♂️', '🧝‍♀️', '🧞', '🧞‍♂️', '🧞‍♀️', '🧟', '🧟‍♂️', '🧟‍♀️', '💆', '💆‍♂️', '💆‍♀️', '💇', '💇‍♂️', '💇‍♀️', '🚶', '🚶‍♂️', '🚶‍♀️', '🧍', '🧍‍♂️', '🧍‍♀️', '🧎', '🧎‍♂️', '🧎‍♀️', '🏃', '🏃‍♂️', '🏃‍♀️', '💃', '🕺', '🕴️', '👯', '👯‍♂️', '👯‍♀️', '🧘', '🧘‍♂️', '🧘‍♀️', '🛀', '🛌', '👭', '👫', '👬', '💏', '💑', '👪', '👨‍👩‍👧', '👨‍👩‍👧‍👦', '👨‍👩‍👦‍👦', '👨‍👩‍👧‍👧', '👩‍👩‍👦', '👩‍👩‍👧', '👩‍👩‍👧‍👦', '👩‍👩‍👦‍👦', '👩‍👩‍👧‍👧', '👨‍👨‍👦', '👨‍👨‍👧', '👨‍👨‍👧‍👦', '👨‍👨‍👦‍👦', '👨‍👨‍👧‍👧', '👩‍👦', '👩‍👧', '👩‍👧‍👦', '👩‍👦‍👦', '👩‍👧‍👧', '👨‍👦', '👨‍👧', '👨‍👧‍👦', '👨‍👦‍👦', '👨‍👧‍👧'],
@@ -868,7 +868,7 @@ function initializeEmojis() {
         });
     });
 
-    // Load default category (smileys)
+    
     loadEmojiCategory('smileys');
 }
 
