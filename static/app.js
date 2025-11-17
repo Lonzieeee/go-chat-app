@@ -2,8 +2,8 @@ let ws = null;
 let username = '';
 let joinCode = '';
 let replyingTo = null; 
-let editingMessageId = null; // ID of message being edited
-let messages = new Map(); // Store messages by ID
+let editingMessageId = null;
+let messages = new Map();
 
 // DOM element lookups
 const loginScreen = document.getElementById('login-screen');
@@ -25,29 +25,92 @@ const imageInput = document.getElementById('image-input');
 const imagePreview = document.getElementById('image-preview');
 let selectedImage = null;
 
-// VANILLA JS FIREBASE HELPERS (from firebase-init.js)
-const {
-  db,
-  auth,
-  collection,
-  addDoc,
-  serverTimestamp,
-  query,
-  orderBy,
-  limit,
-  onSnapshot,
-} = window.firebaseServices || {};
-const messagesCollection = db ? collection(db, 'rooms/default/messages') : null;
-const loginsCollection = db ? collection(db, 'logins') : null;
 
-// EMOJI CATEGORIES (MUST BE DEFINED BEFORE USE)
+let db = null;
+let auth = null;
+let collection = null;
+let addDoc = null;
+let serverTimestamp = null;
+let query = null;
+let orderBy = null;
+let limit = null;
+let onSnapshot = null;
+
+let messagesCollection = null;
+let loginsCollection = null;
+
+function assignFirebaseServices(services = {}) {
+  db = services.db || null;
+  auth = services.auth || null;
+  collection = services.collection || null;
+  addDoc = services.addDoc || null;
+  serverTimestamp = services.serverTimestamp || null;
+  query = services.query || null;
+  orderBy = services.orderBy || null;
+  limit = services.limit || null;
+  onSnapshot = services.onSnapshot || null;
+}
+
+async function ensureFirebaseServices() {
+  if (db && collection && addDoc && serverTimestamp) {
+    return true;
+  }
+
+  if (window.firebaseServices) {
+    assignFirebaseServices(window.firebaseServices);
+    return true;
+  }
+
+  if (window.firebaseServicesReady?.then) {
+    try {
+      const services = await window.firebaseServicesReady;
+      assignFirebaseServices(services);
+      return true;
+    } catch (error) {
+      console.error('[Firestore] Failed to resolve firebaseServicesReady:', error);
+      return false;
+    }
+  }
+
+  return new Promise((resolve) => {
+    const timeoutId = setTimeout(() => {
+      console.error('[Firestore] Firebase services did not become available in time');
+      resolve(false);
+    }, 5000);
+
+    window.addEventListener(
+      'firebase-services-ready',
+      (event) => {
+        clearTimeout(timeoutId);
+        assignFirebaseServices(event.detail || window.firebaseServices);
+        resolve(true);
+      },
+      { once: true }
+    );
+  });
+}
+
+async function initFirebaseCollections(roomCode = 'default') {
+  const ready = await ensureFirebaseServices();
+  if (!ready || !db || !collection) {
+    console.error('[Firestore] Database not available');
+    return false;
+  }
+
+  messagesCollection = collection(db, 'rooms', roomCode, 'messages');
+  loginsCollection = collection(db, 'logins');
+  console.log(`[Firestore] Collections initialized for room ${roomCode}`);
+  return true;
+}
+
+// EMOJI CATEGORIES
 const emojiCategories = {
     smileys: ["😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃", "🫠", "😉", "😊", "😇", "🥰", "😍", "🤩", "😘", "😗", "☺️", "😚", "😙", "🥲", "😋", "😛", "😜", "🤪", "😝", "🤑", "🤗", "🤭", "🫢", "🫣", "🤫", "🤔", "🫡", "🤐", "🤨", "😐", "😑", "😶", "🫥", "😏", "😒", "🙄", "😬", "🤥", "🫨", "😔", "😪", "🤤", "😴", "😷", "🤒", "🤕", "🤢", "🤮", "🤧", "🥵", "🥶", "😶‍🌫️", "😵", "😵‍💫", "🤯", "🤠", "🥳", "🥸", "😎", "🤓", "🧐", "😕", "😟", "🙁", "☹️", "😮", "😯", "😲", "😳", "🥺", "😦", "😧", "😨", "😰", "😥", "😢", "😭", "😱", "😖", "😣", "😞", "😓", "😩", "😫", "🥱", "😤", "😡", "😠", "🤬", "😈", "👿", "💀", "☠️", "💩", "🤡", "👹", "👺", "👻", "👽", "👾", "🤖", "😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "😾"],
-    gestures: ["👋", "🤚", "🖐️", "✋", "🖖", "🫱", "🫲", "🫳", "🫴", "👌", "🤌", "🤏", "✌️", "🤞", "🫰", "🤟", "🤘", "🤙", "👈", "👉", "👆", "🖕", "👇", "☝️", "🫵", "👍", "👎", "👊", "✊", "🤛", "🤜", "👏", "🙌", "🫶", "👐", "🤲", "🤝", "🙏", "✍️", "💅", "🤳", "💪", "🦾", "🦿", "🦵", "🦶", "👂", "🦻", "👃", "🧠", "🫀", "🫁", "🦷", "🦴", "👀", "👁️", "👅", "👄", "🫦", "👶", "🧒", "👦", "👧", "🧑", "👱", "👨", "🧔", "👨‍🦰", "👨‍🦱", "👨‍🦳", "👨‍🦲", "👩", "👩‍🦰", "🧑‍🦰", "👩‍🦱", "🧑‍🦱", "👩‍🦳", "🧑‍🦳", "👩‍🦲", "🧑‍🦲", "👱‍♀️", "👱‍♂️", "🧓", "👴", "👵", "🙍", "🙍‍♂️", "🙍‍♀️", "🙎", "🙎‍♂️", "🙎‍♀️", "🙅", "🙅‍♂️", "🙅‍♀️", "🙆", "🙆‍♂️", "🙆‍♀️", "💁", "💁‍♂️", "💁‍♀️", "🙋", "🙋‍♂️", "🙋‍♀️", "🧏", "🧏‍♂️", "🧏‍♀️", "🤦", "🤦‍♂️", "🤦‍♀️", "🤷", "🤷‍♂️", "🤷‍♀️", "🧑‍⚕️", "👨‍⚕️", "👩‍⚕️", "🧑‍🎓", "👨‍🎓", "👩‍🎓", "🧑‍🏫", "👨‍🏫", "👩‍🏫", "🧑‍⚖️", "👨‍⚖️", "👩‍⚖️", "🧑‍🌾", "👨‍🌾", "👩‍🌾", "🧑‍🍳", "👨‍🍳", "👩‍🍳", "🧑‍🔧", "👨‍🔧", "👩‍🔧", "🧑‍🏭", "👨‍🏭", "👩‍🏭", "🧑‍💼", "👨‍💼", "👩‍💼", "🧑‍🔬", "👨‍🔬", "👩‍🔬", "🧑‍💻", "👨‍💻", "👩‍💻", "🧑‍🎤", "👨‍🎤", "👩‍🎤", "🧑‍🎨", "👨‍🎨", "👩‍🎨", "🧑‍✈️", "👨‍✈️", "👩‍✈️", "🧑‍🚀", "👨‍🚀", "👩‍🚀", "🧑‍🚒", "👨‍🚒", "👩‍🚒", "👮", "👮‍♂️", "👮‍♀️", "🕵️", "🕵️‍♂️", "🕵️‍♀️", "💂", "💂‍♂️", "💂‍♀️", "🥷", "👷", "👷‍♂️", "👷‍♀️", "🤴", "👸", "👳", "👳‍♂️", "👳‍♀️", "👲", "🧕", "🤵", "🤵‍♂️", "🤵‍♀️", "👰", "👰‍♂️", "👰‍♀️", "🤰", "🤱", "👼", "🎅", "🤶", "🦸", "🦸‍♂️", "🦸‍♀️", "🦹", "🦹‍♂️", "🦹‍♀️", "🧙", "🧙‍♂️", "🧙‍♀️", "🧚", "🧚‍♂️", "🧚‍♀️", "🧛", "🧛‍♂️", "🧛‍♀️", "🧜", "🧜‍♂️", "🧜‍♀️", "🧝", "🧝‍♂️", "🧝‍♀️", "🧞", "🧞‍♂️", "🧞‍♀️", "🧟", "🧟‍♂️", "🧟‍♀️", "💆", "💆‍♂️", "💆‍♀️", "💇", "💇‍♂️", "💇‍♀️", "🚶", "🚶‍♂️", "🚶‍♀️", "🧍", "🧍‍♂️", "🧍‍♀️", "🧎", "🧎‍♂️", "🧎‍♀️", "🏃", "🏃‍♂️", "🏃‍♀️", "💃", "🕺", "🕴️", "👯", "👯‍♂️", "👯‍♀️", "🧘", "🧘‍♂️", "🧘‍♀️", "🛀", "🛌", "👭", "👫", "👬", "💏", "💑", "👪", "👨‍👩‍👧", "👨‍👩‍👧‍👦", "👨‍👩‍👦‍👦", "👨‍👩‍👧‍👧", "👩‍👩‍👦", "👩‍👩‍👧", "👩‍👩‍👧‍👦", "👩‍👩‍👦‍👦", "👩‍👩‍👧‍👧", "👨‍👨‍👦", "👨‍👨‍👧", "👨‍👨‍👧‍👦", "👨‍👨‍👦‍👦", "👨‍👨‍👧‍👧", "👩‍👦", "👩‍👧", "👩‍👧‍👦", "👩‍👦‍👦", "👩‍👧‍👧", "👨‍👦", "👨‍👧", "👨‍👧‍👦", "👨‍👦‍👦", "👨‍👧‍👧"],
-    animals: ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐽', '🐸', '🐵', '🙈', '🙉', '🙊', '🐒', '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗', '🐴', '🦄', '🐝', '🐛', '🦋', '🐌', '🐞', '🐜', '🦟', '🦗', '🕷️', '🕸️', '🦂', '🐢', '🐍', '🦎', '🦖', '🦕', '🐙', '🦑', '🦐', '🦞', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', '🐋', '🦈', '🐊', '🐅', '🐆', '🦓', '🦍', '🦧', '🐘', '🦛', '🦏', '🐪', '🐫', '🦒', '🦘', '🦬', '🐃', '🐂', '🐄', '🐎', '🐖', '🐏', '🐑', '🦙', '🐐', '🦌', '🐕', '🐩', '🦮', '🐕‍🦺', '🐈', '🐈‍⬛', '🪶', '🦅', '🦆', '🦢', '🦩', '🦚', '🦜', '🐓', '🦃', '🦤', '🦣', '🦏', '🦛', '🦘', '🦡', '🐾'],
+    gestures: ["👋", "🤚", "🖐️", "✋", "🖖", "🫱", "🫲", "🫳", "🫴", "👌", "🤌", "🤏", "✌️", "🤞", "🫰", "🤟", "🤘", "🤙", "👈", "👉", "👆", "🖕", "👇", "☝️", "🫵", "👍", "👎", "👊", "✊", "🤛", "🤜", "👏", "🙌", "🫶", "👐", "🤲", "🤝", "🙏", "✍️", "💅", "🤳", "💪", "🦾", "🦿", "🦵", "🦶", "👂", "🦻", "👃", "🧠", "🫀", "🫁", "🦷", "🦴", "👀", "👁️", "👅", "👄", "🫦"],
+    animals: ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐽', '🐸', '🐵', '🙈', '🙉', '🙊', '🐒', '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗', '🐴', '🦄', '🐝', '🐛', '🦋', '🐌', '🐞', '🐜', '🦟', '🦗', '🕷️', '🕸️', '🦂', '🐢', '🐍', '🦎', '🦖', '🦕', '🐙', '🦑', '🦐', '🦞', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', '🐋', '🦈', '🐊', '🐅', '🐆', '🦓', '🦍', '🦧', '🐘', '🦛', '🦏', '🐪', '🐫', '🦒', '🦘', '🦬', '🐃', '🐂', '🐄', '🐎', '🐖', '🐏', '🐑', '🦙', '🐐', '🦌', '🐕', '🐩', '🦮', '🐕‍🦺', '🐈', '🐈‍⬛', '🪶', '🦢', '🦩', '🦚', '🦜', '🐓', '🦃', '🦤', '🦣', '🦘', '🦡', '🐾'],
     food: ['🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🌽', '🥕', '🥔', '🍠', '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🥞', '🥓', '🥩', '🍗', '🍖', '🦴', '🌭', '🍔', '🍟', '🍕', '🥪', '🥙', '🌮', '🌯', '🥗', '🥘', '🥫', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥠', '🥮', '🍢', '🍡', '🍧', '🍨', '🍦', '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫', '🍿', '🍩', '🍪', '🌰', '🥜', '🍯', '🥛', '🍼', '☕️', '🍵', '🧃', '🥤', '🍶', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🧉', '🍾', '🧊'],
-    travel: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🏍️', '🛵', '🦽', '🦼', '🛴', '🚲', '🛺', '🚨', '🚔', '🚍', '🚘', '🚖', '🚡', '🚠', '🚟', '🚃', '🚋', '🚞', '🚝', '🚄', '🚅', '🚈', '🚂', '🚆', '🚇', '🚊', '🚉', '✈️', '🛫', '🛬', '🛩️', '💺', '🛰️', '🚀', '🛸', '🚁', '🛶', '⛵', '🚤', '🛥️', '🛳️', '⛴️', '🚢', '⚓', '⛽', '🚧', '🚦', '🚥', '🗺️', '🗿', '🗽', '🗼', '🏰', '🏯', '🏟️', '🎡', '🎢', '🎠', '⛲', '⛱️', '🏖️', '🏝️', '🏜️', '🌋', '⛰️', '🏔️', '🗻', '🏕️', '⛺', '🏠', '🏡', '🏘️', '🏚️', '🏗️', '🏭', '🏢', '🏬', '🏣', '🏤', '🏥', '🏦', '🏨', '🏪', '🏫', '🏩', '💒', '🏛️', '⛪', '🕌', '🕍', '🛕', '🕋', '⛩️', '🛤️', '🛣️', '🗾', '🎑', '🏞️', '🌅', '🌄', '🌠', '🎇', '🎆', '🌇', '🌆', '🏙️', '🌃', '🌌', '🌉', '🌁'],
-    objects: ['⌚', '📱', '📲', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '🖲️', '🕹️', '🗜️', '💾', '💿', '📀', '📼', '📷', '📸', '📹', '🎥', '📽️', '🎞️', '📞', '☎️', '📟', '📠', '📺', '📻', '🎙️', '🎚️', '🎛️', '⏱️', '⏲️', '⏰', '🕰️', '⌛', '⏳', '📡', '🔋', '🔌', '💡', '🔦', '🕯️', '🧯', '🛢️', '💸', '💵', '💴', '💶', '💷', '🪙', '💰', '💳', '💎', '⚖️', '🪜', '🧰', '🪛', '🔧', '🔨', '⚒️', '🛠️', '⛏️', '🪚', '🔩', '⚙️', '🪤', '🧱', '⛓️', '🧲', '🔫', '💣', '🧨', '🪓', '🔪', '🗡️', '⚔️', '🛡️', '🚬', '⚰️', '🪦', '⚱️', '🏺', '🔮', '📿', '🧿', '💈', '⚗️', '🔭', '🔬', '🕳️', '🩹', '🩺', '💊', '💉', '🩸', '🧬', '🦠', '🧫', '🧪', '🌡️', '🧹', '🪠', '🧺', '🧻', '🚽', '🚰', '🚿', '🛁', '🛀', '🧼', '🪥', '🪒', '🧽', '🪣', '🧴', '🛎️', '🔑', '🗝️', '🚪', '🪑', '🛋️', '🛏️', '🛌', '🧸', '🪆', '🖼️', '🪞', '🪟', '🛍️', '🛒', '🎁', '🎈', '🎏', '🎀', '🪄', '🪅', '🎊', '🎉', '🎎', '🏮', '🎐', '🧧', '✉️', '📩', '📨', '📧', '💌', '📥', '📤', '📦', '🏷️', '🪧', '📪', '📫', '📬', '📭', '📮', '📯', '📜', '📃', '📄', '📑', '🧾', '📊', '📈', '📉', '🗒️', '🗓️', '📆', '📅', '🗑️', '📇', '🗃️', '🗳️', '🗄️', '📋', '📁', '📂', '🗂️', '🗞️', '📰', '📓', '📔', '📒', '📕', '📗', '📘', '📙', '📚', '📖', '🔖', '🧷', '🔗', '📎', '🖇️', '📐', '📏', '🧮', '📌', '📍', '✂️', '🖊️', '🖋️', '✒️', '🖌️', '🖍️', '📝', '✏️', '🔍', '🔎', '🔏', '🔐', '🔒', '🔓'],
+    travel: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🏍️', '🛵', '🦽', '🦼', '🛴', '🚲', '🛺', '🚨', '🚔', '🚍', '🚘', '🚖', '🚡', '🚠', '🚟', '🚃', '🚋', '🚞', '🚝', '🚄', '🚅', '🚈', '🚂', '🚆', '🚇', '🚊', '🚉', '✈️', '🛫', '🛬', '🛩️', '💺', '🛰️', '🚀', '🛸', '🚁', '🛶', '⛵', '🚤', '🛥️', '🛳️', '⛴️', '🚢', '⚓', '⛽', '🚧', '🚦', '🚥', '🗺️', '🗿', '🗽', '🗼', '🏰', '🏯', '🏟️', '🎡', '🎢', '🎠', '⛲', '⛱️', '🏖️', '🏝️', '🏜️', '🌋', '⛰️', '🏔️', '🗻', '🏕️', '⛺'],
+    objects: ['⌚', '📱', '📲', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '🖲️', '🕹️', '🗜️', '💾', '💿', '📀', '📼', '📷', '📸', '📹', '🎥', '📽️', '🎞️', '📞', '☎️', '📟', '📠', '📺', '📻', '🎙️', '🎚️', '🎛️', '⏱️', '⏲️', '⏰', '🕰️', '⌛', '⏳', '📡', '🔋', '🔌', '💡', '🔦', '🕯️', '🧯', '🛢️', '💸', '💵', '💴', '💶', '💷', '🪙', '💰', '💳', '💎', '⚖️', '🪜', '🧰', '🪛', '🔧', '🔨', '⚒️', '🛠️', '⛏️', '🪚', '🔩', '⚙️', '🪤', '🧱', '⛓️', '🧲', '🔫', '💣', '🧨', '🪓', '🔪', '🗡️', '⚔️', '🛡️', '🚬', '⚰️', '🪦', '⚱️', '🏺', '🔮', '📿', '🧿', '💈', '⚗️', '🔭', '🔬'],
     symbols: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '☮️', '✝️', '☪️', '🕉️', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐', '⛎', '♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓', '🆔', '⚛️', '🉑', '☢️', '☣️', '📴', '📳', '🈶', '🈚', '🈸', '🈺', '🈷️', '✴️', '🆚', '💮', '🉐', '㊙️', '㊗️', '🈴', '🈵', '🈹', '🈲', '🔅', '🔆', '📶', '🛜', '♠️', '♥️', '♦️', '♣️', '🃏', '🀄', '🎴', '🎭', '🎨']
 };
 
@@ -78,7 +141,6 @@ if (imageBtn && imageInput) {
     });
 }
 
-
 function initEmojiPicker() {
     const btn = document.getElementById('emoji-btn');
     const picker = document.getElementById('emoji-picker');
@@ -89,7 +151,6 @@ function initEmojiPicker() {
         return false;
     }
     
-    
     if (!btn.hasAttribute('data-emoji-initialized')) {
         btn.setAttribute('data-emoji-initialized', 'true');
         btn.addEventListener('click', (e) => {
@@ -99,7 +160,6 @@ function initEmojiPicker() {
         });
     }
     
-
     if (!grid.hasAttribute('data-emoji-initialized')) {
         grid.setAttribute('data-emoji-initialized', 'true');
         initializeEmojis();
@@ -108,13 +168,11 @@ function initEmojiPicker() {
     return true;
 }
 
-
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initEmojiPicker);
 } else {
     initEmojiPicker();
 }
-
 
 const chatScreenObserver = new MutationObserver(() => {
     if (!chatScreen.classList.contains('hidden') && emojiPicker && emojiPicker.classList.contains('hidden')) {
@@ -129,42 +187,100 @@ if (chatScreen) {
 }
 
 function setupFirebaseHistoryListener() {
-    if (!messagesCollection) return;
-    const historyQuery = query(messagesCollection, orderBy('timestamp', 'asc'), limit(200));
-    onSnapshot(historyQuery, (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-            if (change.type === 'added') {
-                const data = change.doc.data();
-                handleMessage({
-                    type: 'message',
-                    id: change.doc.id,
-                    author: data.author,
-                    content: data.content,
-                    timestamp: (data.timestamp && data.timestamp.seconds) || Date.now()/1000,
+    if (!messagesCollection) {
+        console.error('[Firestore] Cannot setup listener - messagesCollection not initialized');
+        return;
+    }
+    
+    try {
+        const historyQuery = query(
+            messagesCollection, 
+            orderBy('timestamp', 'asc'), 
+            limit(200)
+        );
+        
+        const unsubscribe = onSnapshot(historyQuery, 
+            (snapshot) => {
+                console.log('[Firestore] Snapshot received with', snapshot.docs.length, 'documents');
+                
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type === 'added') {
+                        const data = change.doc.data();
+                        console.log('[Firestore] New message from history:', data);
+                        
+                        handleMessage({
+                            type: 'message',
+                            id: change.doc.id,
+                            author: data.author,
+                            content: data.content,
+                            image: data.image || null,
+                            replyTo: data.replyTo || null,
+                            replyToAuthor: data.replyToAuthor || null,
+                            replyToContent: data.replyToContent || null,
+                            timestamp: (data.timestamp && data.timestamp.seconds) 
+                                ? data.timestamp.seconds 
+                                : Date.now() / 1000,
+                        });
+                    }
                 });
+            },
+            (error) => {
+                console.error('[Firestore] Listener error:', error);
+                console.error('[Firestore] Error code:', error.code);
+                console.error('[Firestore] Error message:', error.message);
             }
-        });
-    });
+        );
+        
+        console.log('[Firestore] Listener setup complete');
+        window.firestoreUnsubscribe = unsubscribe;
+        
+    } catch (error) {
+        console.error('[Firestore] Failed to setup listener:', error);
+    }
 }
 
 async function firebaseSendMessage(msgObj) {
-    if (!messagesCollection) return;
-    await addDoc(messagesCollection, {
-        author: msgObj.author,
-        content: msgObj.content,
-        timestamp: serverTimestamp(),
-    });
+    if (!messagesCollection) {
+        console.error('[Firestore] messagesCollection is not initialized');
+        return;
+    }
+    
+    try {
+        const docRef = await addDoc(messagesCollection, {
+            author: msgObj.author,
+            content: msgObj.content,
+            image: msgObj.image || null,
+            replyTo: msgObj.replyTo || null,
+            replyToAuthor: msgObj.replyToAuthor || null,
+            replyToContent: msgObj.replyToContent || null,
+            timestamp: serverTimestamp(),
+        });
+        console.log('[Firestore] Document written with ID:', docRef.id);
+    } catch (error) {
+        console.error('[Firestore] Error adding document:', error);
+        throw error;
+    }
 }
 
-async function logFirebaseLogin(username) {
-    if (!loginsCollection) return;
-    await addDoc(loginsCollection, {
-        username,
-        joinedAt: serverTimestamp(),
-    });
+async function logFirebaseLogin(username, roomCode) {
+    if (!loginsCollection) {
+        console.error('[Firestore] loginsCollection is not initialized');
+        return;
+    }
+    
+    try {
+        const docRef = await addDoc(loginsCollection, {
+            username,
+            roomCode,
+            joinedAt: serverTimestamp(),
+        });
+        console.log('[Firestore] Login logged with ID:', docRef.id);
+    } catch (error) {
+        console.error('[Firestore] Error logging login:', error);
+        console.error('[Firestore] Error details:', error.code, error.message);
+    }
 }
 
-// Inject in joinChat
 async function joinChat() {
     const name = usernameInput.value.trim();
     const code = joinCodeInput ? joinCodeInput.value.trim() : '';
@@ -180,7 +296,6 @@ async function joinChat() {
     username = name;
     joinCode = code;
     
-    // Connect to WebSocket
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     
@@ -188,7 +303,6 @@ async function joinChat() {
 
     ws.onopen = () => {
         console.log('Connected to chat server');
-        // Send join info (username + join code) as first message
         ws.send(JSON.stringify({
             type: 'join',
             name: username,
@@ -196,26 +310,21 @@ async function joinChat() {
         }));
     };
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
         const data = event.data.trim();
 
-        // Handle invalid join code explicitly so user never "joins" the chat UI
         if (data === 'Invalid join code') {
             alert('Invalid join code');
-            // Ensure we don't stay in the chat screen
             if (!loginScreen.classList.contains('hidden')) {
-                // Already on login screen, just close socket
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.close();
                 }
             } else {
-                // If we were already switched, reset UI back to login
                 leaveChat();
             }
             return;
         }
 
-        // Handle invalid join message (e.g. server couldn't parse our first JSON join packet)
         if (data === 'Invalid join message') {
             alert('Invalid join message from server. Please try again.');
             if (!loginScreen.classList.contains('hidden')) {
@@ -223,13 +332,11 @@ async function joinChat() {
                     ws.close();
                 }
             } else {
-                // If we somehow switched, go back to login and reset state
                 leaveChat();
             }
             return;
         }
 
-        // On first successful server message, move to chat screen
         if (loginScreen && !loginScreen.classList.contains('hidden')) {
             loginScreen.classList.add('hidden');
             chatScreen.classList.remove('hidden');
@@ -237,23 +344,32 @@ async function joinChat() {
                 currentUserSpan.textContent = 'Yapchat';
             }
 
-            // Initialize emoji picker when chat screen is shown
             setTimeout(() => {
                 initEmojiPicker();
             }, 100);
             messageInput.focus();
+            
+            // Setup Firebase after successful join
+            console.log('[Firestore] Setting up Firebase after successful join...');
+            try {
+                const collectionsReady = await initFirebaseCollections(joinCode);
+                if (collectionsReady) {
+                    await logFirebaseLogin(username, joinCode);
+                    setupFirebaseHistoryListener();
+                }
+            } catch (error) {
+                console.error('[Firestore] Failed to initialize Firebase:', error);
+            }
         }
         
-        // Try to parse as JSON first
         try {
             const message = JSON.parse(data);
-            // Validate message has required fields
             if (message && message.type) {
                 handleMessage(message);
                 return;
             }
         } catch (e) {
-            // Not JSON, continue to check old format
+            // Not JSON
         }
         
         const oldFormatMatch = data.match(/^\[(.+?)\]:\s*(.+)$/);
@@ -261,11 +377,9 @@ async function joinChat() {
             const author = oldFormatMatch[1];
             const content = oldFormatMatch[2];
             
-            // Try to parse the content as JSON
             try {
                 const jsonContent = JSON.parse(content);
                 if (jsonContent && jsonContent.type) {
-                    // It's JSON wrapped in old format - extract and use it
                     jsonContent.author = author;
                     if (!jsonContent.id) jsonContent.id = 'msg_' + Date.now() + '_' + author;
                     if (!jsonContent.timestamp) jsonContent.timestamp = Math.floor(Date.now() / 1000);
@@ -273,10 +387,9 @@ async function joinChat() {
                     return;
                 }
             } catch (e) {
-                // Content is not JSON, treat as plain text
+                // Plain text
             }
             
-            // Plain text in old format
             const plainMsg = {
                 id: 'msg_' + Date.now() + '_' + author,
                 type: 'message',
@@ -300,7 +413,6 @@ async function joinChat() {
             return;
         }
         
-        // Fallback: display as plain text
         displayMessage(data);
     };
 
@@ -314,24 +426,25 @@ async function joinChat() {
         if (!chatScreen.classList.contains('hidden')) {
             addSystemMessage('Disconnected from server');
         }
+        
+        if (window.firestoreUnsubscribe) {
+            window.firestoreUnsubscribe();
+            window.firestoreUnsubscribe = null;
+        }
     };
-
-    // Firebase: log login, subscribe to history
-    setupFirebaseHistoryListener();
-    await logFirebaseLogin(username);
 }
 
 async function sendMessage() {
     const message = messageInput.value.trim();
     const hasImage = selectedImage !== null;
     
-    // Need either message text or image
     if ((message === '' && !hasImage) || !ws || ws.readyState !== WebSocket.OPEN) {
         return;
     }
+    
     let messageObj;
+    
     if (editingMessageId) {
-        // Edit existing message (images not supported for edits)
         ws.send(JSON.stringify({
             type: 'edit',
             id: editingMessageId,
@@ -340,14 +453,12 @@ async function sendMessage() {
         editingMessageId = null;
         document.querySelector('.reply-preview')?.remove();
     } else {
-        // Send new message or reply
         messageObj = {
             type: 'message',
             author: username,
             content: message || ''
         };
         
-        // Add image if selected
         if (hasImage) {
             messageObj.image = selectedImage;
             selectedImage = null;
@@ -361,25 +472,24 @@ async function sendMessage() {
         }
         
         ws.send(JSON.stringify(messageObj));
+        
+        // Store in Firestore
+        try {
+            await firebaseSendMessage(messageObj);
+            console.log('[Firestore] Message saved successfully:', messageObj);
+        } catch (err) {
+            console.error('[Firestore] Failed to save message:', err);
+            console.error('[Firestore] Error details:', err.message, err.code);
+        }
     }
     
     messageInput.value = '';
     messageInput.focus();
     updateInputPlaceholder();
-
-    // ALSO store in Firestore only if messageObj defined
-    if (typeof messageObj !== 'undefined') {
-        try {
-            await firebaseSendMessage(messageObj);
-            console.log('[Firestore] Tried to send:', messageObj);
-        } catch (err) {
-            console.error('[Firestore] Error:', err);
-        }
-    }
 }
 
 function handleImageSelect(file) {
-    if (file.size > 10 * 1024 * 1024) { // 10mB limit
+    if (file.size > 10 * 1024 * 1024) {
         alert('Image is too large. Please select an image smaller than 10MB.');
         return;
     }
@@ -404,7 +514,6 @@ function compressImage(dataUrl, callback) {
         const maxHeight = 1200;
         const quality = 0.8;
         
-        // Calculate new dimensions
         if (width > height) {
             if (width > maxWidth) {
                 height = (height * maxWidth) / width;
@@ -423,7 +532,6 @@ function compressImage(dataUrl, callback) {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
         
-        // Convert to base64 with compression
         const compressed = canvas.toDataURL('image/jpeg', quality);
         callback(compressed);
     };
@@ -463,7 +571,6 @@ function clearImagePreview() {
     selectedImage = null;
 }
 
-// Make it globally accessible
 window.clearImagePreview = clearImagePreview;
 
 function updateInputPlaceholder() {
@@ -483,7 +590,6 @@ function handleMessage(msg) {
             break;
         case 'message':
             displayUserMessage(msg);
-            // Mark as read
             setTimeout(() => markAsRead(msg.id), 500);
             break;
         case 'edit':
@@ -565,7 +671,6 @@ function renderMemberAvatars(memberNames) {
 }
 
 function displayUserMessage(msg) {
-    // Ensure required fields exist
     if (!msg.id) {
         msg.id = 'msg_' + Date.now() + '_' + (msg.author || 'unknown');
     }
@@ -579,7 +684,6 @@ function displayUserMessage(msg) {
         msg.readBy = {};
     }
     
-    // Store message
     messages.set(msg.id, msg);
     
     const messageDiv = document.createElement('div');
@@ -590,14 +694,12 @@ function displayUserMessage(msg) {
         messageDiv.classList.add('own');
     } else {
         messageDiv.classList.add('other');
-        // Show author name for other's messages
         const authorSpan = document.createElement('div');
         authorSpan.classList.add('message-author');
         authorSpan.textContent = msg.author;
         messageDiv.appendChild(authorSpan);
     }
     
-    // Reply preview if this is a reply
     if (msg.replyTo) {
         const replyPreview = document.createElement('div');
         replyPreview.classList.add('reply-preview', 'clickable');
@@ -614,7 +716,6 @@ function displayUserMessage(msg) {
         replyContent.textContent = msg.replyToContent;
         replyPreview.appendChild(replyContent);
         
-        // arrow indicator
         const arrowIcon = document.createElement('span');
         arrowIcon.classList.add('reply-arrow');
         arrowIcon.innerHTML = '↗';
@@ -623,7 +724,6 @@ function displayUserMessage(msg) {
         messageDiv.appendChild(replyPreview);
     }
     
-    // Image if present
     if (msg.image) {
         const imageDiv = document.createElement('div');
         imageDiv.classList.add('message-image');
@@ -632,7 +732,6 @@ function displayUserMessage(msg) {
         img.alt = 'Shared image';
         img.loading = 'lazy';
         img.onclick = () => {
-            // Open image in new window for full view
             const newWindow = window.open();
             newWindow.document.write(`<img src="${msg.image}" style="max-width: 100%; height: auto;">`);
         };
@@ -640,7 +739,6 @@ function displayUserMessage(msg) {
         messageDiv.appendChild(imageDiv);
     }
     
-    // Message content (only if there's text)
     if (msg.content && msg.content.trim() !== '') {
         const contentDiv = document.createElement('div');
         contentDiv.classList.add('message-content');
@@ -648,17 +746,14 @@ function displayUserMessage(msg) {
         messageDiv.appendChild(contentDiv);
     }
     
-    // Message metadata
     const metaDiv = document.createElement('div');
     metaDiv.classList.add('message-meta');
     
-    // Timestamp
     const timeSpan = document.createElement('span');
     timeSpan.classList.add('message-time');
     timeSpan.textContent = msg.timestamp ? formatTime(msg.timestamp) : 'just now';
     metaDiv.appendChild(timeSpan);
     
-    // Edited indicator
     if (msg.edited) {
         const editedSpan = document.createElement('span');
         editedSpan.classList.add('edited-indicator');
@@ -666,7 +761,6 @@ function displayUserMessage(msg) {
         metaDiv.appendChild(editedSpan);
     }
     
-    // Read receipts (only for own messages)
     if (msg.author === username && msg.readBy) {
         const readReceipt = document.createElement('span');
         readReceipt.classList.add('read-receipt');
@@ -685,11 +779,9 @@ function displayUserMessage(msg) {
     
     messageDiv.appendChild(metaDiv);
     
-    // Action buttons
     const actionsDiv = document.createElement('div');
     actionsDiv.classList.add('message-actions');
     
-    // Reply button (for other's messages)
     if (msg.author !== username) {
         const replyBtn = document.createElement('button');
         replyBtn.classList.add('action-btn', 'reply-btn');
@@ -699,7 +791,6 @@ function displayUserMessage(msg) {
         actionsDiv.appendChild(replyBtn);
     }
     
-    // Edit button (for own messages)
     if (msg.author === username) {
         const editBtn = document.createElement('button');
         editBtn.classList.add('action-btn', 'edit-btn');
@@ -711,7 +802,6 @@ function displayUserMessage(msg) {
     
     messageDiv.appendChild(actionsDiv);
     
-    // Check if message already exists (for updates)
     const existing = messagesDiv.querySelector(`[data-message-id="${msg.id}"]`);
     if (existing) {
         existing.replaceWith(messageDiv);
@@ -730,7 +820,6 @@ function updateMessage(msg) {
             contentDiv.textContent = msg.content;
         }
         
-        // Update edited indicator
         let editedSpan = messageDiv.querySelector('.edited-indicator');
         if (!editedSpan) {
             editedSpan = document.createElement('span');
@@ -742,7 +831,6 @@ function updateMessage(msg) {
         }
         editedSpan.textContent = 'edited';
         
-        // Update stored message
         if (messages.has(msg.id)) {
             const storedMsg = messages.get(msg.id);
             storedMsg.content = msg.content;
@@ -765,7 +853,6 @@ function updateReadReceipts(msg) {
             }
         }
         
-        // Update stored message
         if (messages.has(msg.id)) {
             messages.get(msg.id).readBy = msg.readBy;
         }
@@ -779,7 +866,6 @@ function replyToMessage(messageId) {
     replyingTo = messageId;
     editingMessageId = null;
     
-    // Show reply preview
     const existingPreview = document.querySelector('.reply-preview');
     if (existingPreview) existingPreview.remove();
     
@@ -822,7 +908,6 @@ function editMessage(messageId) {
     messageInput.value = msg.content;
     messageInput.focus();
     
-    // Show edit indicator
     const existingPreview = document.querySelector('.reply-preview');
     if (existingPreview) existingPreview.remove();
     
@@ -860,18 +945,13 @@ function markAsRead(messageId) {
 function jumpToMessage(messageId) {
     const targetMessage = messagesDiv.querySelector(`[data-message-id="${messageId}"]`);
     if (!targetMessage) {
-        // Message might not be loaded yet, try to find it
         console.warn('Message not found:', messageId);
         return;
     }
     
-    // Scroll to the message smoothly
     targetMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    
-    // Highlight the message
     targetMessage.classList.add('highlighted');
     
-    // Remove highlight after animation
     setTimeout(() => {
         targetMessage.classList.remove('highlighted');
     }, 2000);
@@ -883,34 +963,29 @@ function formatTime(timestamp) {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     
-    // Format time: HH:MM (24-hour) or h:mm AM/PM (12-hour)
     const timeOptions = { 
         hour: '2-digit', 
         minute: '2-digit',
-        hour12: false // Use 24-hour format
+        hour12: false
     };
     const timeStr = date.toLocaleTimeString([], timeOptions);
     
-    // If message is from today, just show time
     if (messageDate.getTime() === today.getTime()) {
         return timeStr;
     }
     
-    // If message is from yesterday
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     if (messageDate.getTime() === yesterday.getTime()) {
         return `Yesterday ${timeStr}`;
     }
     
-    // If message is from this week (within last 7 days)
     const daysDiff = Math.floor((today - messageDate) / (1000 * 60 * 60 * 24));
     if (daysDiff < 7) {
         const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         return `${dayNames[date.getDay()]} ${timeStr}`;
     }
     
-    // For older messages, show date and time
     const dateOptions = { 
         month: 'short', 
         day: 'numeric',
@@ -922,7 +997,6 @@ function formatTime(timestamp) {
 }
 
 function displayMessage(rawMessage) {
-    // Fallback for old plain text format
     const messageDiv = document.createElement('div');
     messageDiv.classList.add('message');
 
@@ -975,7 +1049,11 @@ function leaveChat() {
         ws.close();
     }
     
-    // Reset UI
+    if (window.firestoreUnsubscribe) {
+        window.firestoreUnsubscribe();
+        window.firestoreUnsubscribe = null;
+    }
+    
     messagesDiv.innerHTML = '';
     usernameInput.value = '';
     messageInput.value = '';
@@ -989,27 +1067,20 @@ function leaveChat() {
     document.querySelector('.reply-preview')?.remove();
 }
 
-// Handle page unload
 window.addEventListener('beforeunload', () => {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.close();
     }
 });
 
-
 function initializeEmojis() {
-    // Add event listeners to category buttons
     document.querySelectorAll('.emoji-category').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            // Remove active class from all categories
             document.querySelectorAll('.emoji-category').forEach(b => b.classList.remove('active'));
-            // Add active class to clicked category
             e.target.classList.add('active');
-            // Load emojis for this category
             loadEmojiCategory(e.target.dataset.category);
         });
     });
-
     
     loadEmojiCategory('smileys');
 }
@@ -1049,7 +1120,6 @@ function openEmojiPicker() {
     if (!emojiPicker || !emojiBtn) return;
     emojiPicker.classList.remove('hidden');
     emojiBtn.classList.add('active');
-    console.log('Emoji picker opened');
 }
 
 function closeEmojiPicker() {
@@ -1058,16 +1128,13 @@ function closeEmojiPicker() {
     emojiBtn.classList.remove('active');
 }
 
-// Close emoji picker when clicking outside (only after DOM is ready)
 document.addEventListener('click', (e) => {
     if (!emojiPicker || !emojiBtn) return;
     
-    // Don't close if clicking on the emoji button or inside the picker
     if (emojiBtn.contains(e.target) || emojiPicker.contains(e.target)) {
         return;
     }
     
-    // Close if clicking outside
     if (!emojiPicker.classList.contains('hidden')) {
         closeEmojiPicker();
     }
