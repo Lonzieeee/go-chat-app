@@ -109,31 +109,8 @@ body {
 
 /* Chat screen specific */
 #chat-screen {
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-}
-
-/* Desktop/Laptop - wider screens */
-@media (min-width: 1024px) {
-    .chat-wrapper {
-        max-width: 1000px;
-    }
-    
-    .screen {
-        padding: 30px;
-    }
-    
-    #chat-screen {
-        padding: 30px;
-    }
-}
-
-/* Large desktop screens */
-@media (min-width: 1440px) {
-    .chat-wrapper {
-        max-width: 1200px;
-    }
+    align-items: stretch;
+    padding: 0;
 }
 
 .hidden {
@@ -355,19 +332,20 @@ body {
 
 .chat-wrapper {
     display: flex;
+    
     flex-direction: column;
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(20px);
     border-radius: 24px;
     box-shadow: var(--shadow-xl);
     overflow: hidden;
-    width: 100%;
-    height: 100%;
-    max-width: 900px;
-    max-height: 100%;
+    width: 100vw;
+    height: 100vh;
+    max-width: 800px;
+    max-height: 1000px;
     animation: fadeInUp 0.6s ease;
     box-sizing: border-box;
-    margin: 0 auto;
+  margin: auto;
 }
 
 .chat-header {
@@ -411,25 +389,17 @@ body {
 .status-indicator {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 1em;
-    font-weight: 500;
-    opacity: 0.95;
-    margin-left: 12px;
-}
-
-#online-count {
-    font-size: 1em;
-    font-weight: 500;
+    gap: 6px;
+    font-size: 0.85em;
+    opacity: 0.9;
 }
 
 .status-dot {
-    width: 20px;
-    height: 20px;
-    background: greenyellow;
+    width: 8px;
+    height: 8px;
+    background: var(--success);
     border-radius: 50%;
     animation: pulse 2s ease infinite;
-    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
 }
 
 @keyframes pulse {
@@ -443,26 +413,58 @@ body {
     gap: 12px;
 }
 
-.user-info > span {
-    display: none;
-}
-
 .user-avatar {
     width: 36px;
     height: 36px;
-    border-radius: 50%;
-    background: var(--secondary);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: white;
     display: flex;
     align-items: center;
     justify-content: center;
+    font-size: 0.95em;
     font-weight: 600;
-    font-size: 14px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    text-transform: uppercase;
 }
 
-.user-info > span {
-    font-weight: 500;
-    font-size: 0.95em;
+.member-avatars {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.member-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85em;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.member-avatar.more {
+    background: transparent;
+    border-style: dashed;
+    font-size: 0.8em;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 .leave-btn {
@@ -1105,7 +1107,8 @@ body {
     }
 
     .features {
-        display: none; 
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
     }
 
     .feature-item {
@@ -1138,18 +1141,17 @@ body {
         border-radius: 0;
         height: 100%;
         width: 100%;
-        max-width: 100% !important;
+        max-width: 100%;
         margin: 0;
     }
 
     #chat-screen {
-        padding: 0 !important;
+        padding: 0;
         border-radius: 0;
     }
 
     #chat-screen.screen {
         align-items: stretch;
-        padding: 0 !important;
     }
 
     .chat-header {
@@ -1173,14 +1175,20 @@ body {
         gap: 8px;
     }
 
-    .user-info > span {
-        display: none;
-    }
-
     .user-avatar {
         width: 32px;
         height: 32px;
-        font-size: 12px;
+        font-size: 0.85em;
+    }
+
+    .member-avatars {
+        gap: 4px;
+    }
+
+    .member-avatar {
+        width: 28px;
+        height: 28px;
+        font-size: 0.75em;
     }
 
     .leave-btn {
@@ -1372,7 +1380,8 @@ body {
     }
 
     .features {
-        display: none; 
+        grid-template-columns: 1fr;
+        gap: 10px;
     }
 
     .description {

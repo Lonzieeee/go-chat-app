@@ -27,15 +27,48 @@ func (s *ChatServer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	// Read username from first message
+	// Read join info (username + join code) from first message
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
-		log.Printf("Error reading username: %v", err)
+		log.Printf("Error reading join info: %v", err)
 		return
 	}
-	name := strings.TrimSpace(string(msg))
+
+	var joinData struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+		Code string `json:"code"`
+	}
+
+	name := ""
+	
+	// Require a proper JSON join message
+	if err := json.Unmarshal(msg, &joinData); err != nil || joinData.Type != "join" {
+		log.Printf("Invalid join message from %s", r.RemoteAddr)
+		conn.WriteMessage(websocket.TextMessage, []byte("Invalid join message"))
+		return
+	}
+
+	// Enforce join code
+	if joinData.Code != validJoinCode {
+		log.Printf("Invalid join code from %s", r.RemoteAddr)
+		conn.WriteMessage(websocket.TextMessage, []byte("Invalid join code"))
+		return
+	}
+
+	name = strings.TrimSpace(joinData.Name)
+
 	if name == "" {
 		name = r.RemoteAddr
+	}
+
+	// Optional: restrict to specific allowed members if configured
+	if s.allowedMembers != nil && len(s.allowedMembers) > 0 {
+		if !s.allowedMembers[name] {
+			log.Printf("Rejected user %s: not in allowedMembers", name)
+			conn.WriteMessage(websocket.TextMessage, []byte("You are not a member of this chat"))
+			return
+		}
 	}
 
 	client := &Client{
