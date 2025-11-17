@@ -24,7 +24,7 @@ type Message struct {
 	Timestamp      int64            `json:"timestamp"`
 	ReplyTo        string           `json:"replyTo,omitempty"` // ID of message being replied to
 	Edited         bool             `json:"edited,omitempty"`
-	ReadBy         map[string]int64 `json:"readBy,omitempty"`         // username -> timestamp
+	ReadBy         map[string]int64 `json:"readBy,omitempty"` // username -> timestamp
 	ReplyToContent string           `json:"replyToContent,omitempty"` // Content of replied message
 	ReplyToAuthor  string           `json:"replyToAuthor,omitempty"`  // Author of replied message
 }
@@ -75,7 +75,10 @@ func (s *ChatServer) Start() {
 			s.mu.Lock()
 			if _, ok := s.clients[client]; ok {
 				delete(s.clients, client)
-				close(client.outgoing)
+				// Only close channel if it's not nil (for websocket clients)
+				if client.outgoing != nil {
+					close(client.outgoing)
+				}
 			}
 			s.mu.Unlock()
 			log.Printf("%s left the chat. Total clients: %d", client.name, len(s.clients))
@@ -102,10 +105,13 @@ func (s *ChatServer) Start() {
 
 			s.mu.RLock()
 			for client := range s.clients {
-				select {
-				case client.outgoing <- string(msgJSON):
-				default:
-					// Client buffer full, skip
+				// Check if outgoing channel is open before sending
+				if client.outgoing != nil {
+					select {
+					case client.outgoing <- string(msgJSON):
+					default:
+						// Client buffer full, skip
+					}
 				}
 			}
 			s.mu.RUnlock()
@@ -143,10 +149,12 @@ func (s *ChatServer) broadcastStats() {
 	}
 
 	for client := range s.clients {
-		select {
-		case client.outgoing <- string(msgJSON):
-		default:
-			// skip if client buffer is full
+		if client.outgoing != nil {
+			select {
+			case client.outgoing <- string(msgJSON):
+			default:
+				// skip if client buffer is full
+			}
 		}
 	}
 }
@@ -172,10 +180,12 @@ func (s *ChatServer) sendHistoryToClient(client *Client) {
 		return
 	}
 
-	select {
-	case client.outgoing <- string(data):
-	default:
-		// drop history if client buffer full
+	if client.outgoing != nil {
+		select {
+		case client.outgoing <- string(data):
+		default:
+			// drop history if client buffer full
+		}
 	}
 }
 
@@ -189,6 +199,15 @@ func (s *ChatServer) HandleConnection(conn net.Conn) {
 		return
 	}
 	name := strings.TrimSpace(scanner.Text())
+
+	// ---- THIS IS THE FIX ----
+	// Check for HTTP requests (like Render's health check)
+	if name == "" || strings.HasPrefix(name, "HEAD /") || strings.HasPrefix(name, "GET /") || strings.HasPrefix(name, "User-Agent:") {
+		log.Printf("Ignoring health check or empty connection from %s", conn.RemoteAddr())
+		return // Just close the connection and do nothing
+	}
+	// ---- END OF FIX ----
+
 	if name == "" {
 		name = conn.RemoteAddr().String()
 	}
