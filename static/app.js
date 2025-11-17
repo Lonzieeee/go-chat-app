@@ -25,6 +25,170 @@ const imageInput = document.getElementById('image-input');
 const imagePreview = document.getElementById('image-preview');
 let selectedImage = null;
 
+// Modal references
+const modalOverlay = document.getElementById('modal-overlay');
+const modalTitle = document.getElementById('modal-title');
+const modalMessage = document.getElementById('modal-message');
+const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+const modalCancelBtn = document.getElementById('modal-cancel-btn');
+const modalIcon = document.getElementById('modal-icon');
+const modalState = {
+  onConfirm: null,
+  onCancel: null,
+};
+
+const modalIcons = {
+  info: `
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" />
+      <path d="M12 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M12 8h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  `,
+  warning: `
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+      <path d="M12 4L3 20h18L12 4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+      <path d="M12 10v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  `,
+  error: `
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" />
+      <path d="M15 15l-6-6M9 15l6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  `,
+  success: `
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" />
+      <path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  `,
+};
+
+function setModalIcon(type = 'info') {
+  if (!modalIcon) return;
+  modalIcon.innerHTML = modalIcons[type] || modalIcons.info;
+}
+
+function hideModal() {
+  if (!modalOverlay) return;
+  modalOverlay.classList.add('hidden');
+  modalOverlay.setAttribute('aria-hidden', 'true');
+  modalState.onConfirm = null;
+  modalState.onCancel = null;
+}
+
+function showModal({
+  title = 'Notice',
+  message = '',
+  type = 'info',
+  confirmText = 'OK',
+  cancelText = null,
+  onConfirm = null,
+  onCancel = null,
+} = {}) {
+  if (!modalOverlay || !modalTitle || !modalMessage || !modalConfirmBtn) {
+    alert(message);
+    return;
+  }
+
+  modalOverlay.dataset.type = type;
+  modalTitle.textContent = title;
+  modalMessage.textContent = message;
+  setModalIcon(type);
+
+  modalConfirmBtn.textContent = confirmText;
+  modalConfirmBtn.classList.toggle('danger', type === 'warning' || type === 'error');
+
+  if (cancelText) {
+    modalCancelBtn.textContent = cancelText;
+    modalCancelBtn.classList.remove('hidden');
+  } else {
+    modalCancelBtn.classList.add('hidden');
+  }
+
+  modalOverlay.classList.remove('hidden');
+  modalOverlay.setAttribute('aria-hidden', 'false');
+
+  modalState.onConfirm = () => {
+    hideModal();
+    if (typeof onConfirm === 'function') {
+      onConfirm();
+    }
+  };
+
+  modalState.onCancel = () => {
+    hideModal();
+    if (typeof onCancel === 'function') {
+      onCancel();
+    }
+  };
+}
+
+function showErrorModal(message, title = 'Something went wrong') {
+  showModal({
+    title,
+    message,
+    type: 'error',
+    confirmText: 'Got it',
+  });
+}
+
+function showWarningModal({ title, message, confirmText = 'Confirm', cancelText = 'Cancel', onConfirm }) {
+  showModal({
+    title,
+    message,
+    type: 'warning',
+    confirmText,
+    cancelText,
+    onConfirm,
+  });
+}
+
+function showInfoModal({ title, message, confirmText = 'OK' }) {
+  showModal({
+    title,
+    message,
+    type: 'info',
+    confirmText,
+  });
+}
+
+if (modalConfirmBtn) {
+  modalConfirmBtn.addEventListener('click', () => {
+    if (modalState.onConfirm) {
+      modalState.onConfirm();
+    } else {
+      hideModal();
+    }
+  });
+}
+
+if (modalCancelBtn) {
+  modalCancelBtn.addEventListener('click', () => {
+    if (modalState.onCancel) {
+      modalState.onCancel();
+    } else {
+      hideModal();
+    }
+  });
+}
+
+if (modalOverlay) {
+  modalOverlay.addEventListener('click', (event) => {
+    if (event.target === modalOverlay) {
+      modalState.onCancel ? modalState.onCancel() : hideModal();
+    }
+  });
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && modalOverlay && !modalOverlay.classList.contains('hidden')) {
+    modalState.onCancel ? modalState.onCancel() : hideModal();
+  }
+});
+
 
 let db = null;
 let auth = null;
@@ -127,7 +291,15 @@ messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') sendMessage();
 });
 
-leaveBtn.addEventListener('click', leaveChat);
+leaveBtn.addEventListener('click', () => {
+    showWarningModal({
+        title: 'Leave YapChat?',
+        message: 'You will disconnect from this room and stop receiving messages for this code.',
+        confirmText: 'Leave',
+        cancelText: 'Stay',
+        onConfirm: () => leaveChat(),
+    });
+});
 
 // Image upload 
 if (imageBtn && imageInput) {
@@ -276,11 +448,19 @@ async function joinChat() {
     const name = usernameInput.value.trim();
     const code = joinCodeInput ? joinCodeInput.value.trim() : '';
     if (name === '') {
-        alert('Please enter your name');
+        showInfoModal({
+            title: 'Name required',
+            message: 'Please enter your name before joining YapChat.',
+            confirmText: 'Got it',
+        });
         return;
     }
     if (!code) {
-        alert('Please enter the join code');
+        showInfoModal({
+            title: 'Join code required',
+            message: 'Enter the invite/join code to access the room.',
+            confirmText: 'Okay',
+        });
         return;
     }
 
@@ -305,7 +485,7 @@ async function joinChat() {
         const data = event.data.trim();
 
         if (data === 'Invalid join code') {
-            alert('Invalid join code');
+            showErrorModal('That join code is not valid. Double-check with the host and try again.', 'Invalid join code');
             if (!loginScreen.classList.contains('hidden')) {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.close();
@@ -317,7 +497,7 @@ async function joinChat() {
         }
 
         if (data === 'Invalid join message') {
-            alert('Invalid join message from server. Please try again.');
+            showErrorModal('We received an invalid response from the server. Please try joining again.', 'Join failed');
             if (!loginScreen.classList.contains('hidden')) {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.close();
@@ -409,7 +589,7 @@ async function joinChat() {
 
     ws.onerror = (error) => {
         console.error('WebSocket error:', error);
-        alert('Failed to connect to chat server');
+        showErrorModal('Failed to connect to the chat server. Please check your connection and try again.', 'Connection error');
     };
 
     ws.onclose = () => {
@@ -477,7 +657,7 @@ async function sendMessage() {
 
 function handleImageSelect(file) {
     if (file.size > 10 * 1024 * 1024) {
-        alert('Image is too large. Please select an image smaller than 10MB.');
+        showErrorModal('Image is too large. Please choose a file smaller than 10MB.', 'Image too large');
         return;
     }
     

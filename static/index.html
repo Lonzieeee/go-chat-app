@@ -172,6 +172,21 @@
         </div>
     </div>
 
+    <!-- Modal -->
+    <div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-message" aria-hidden="true">
+        <div class="modal">
+            <div id="modal-icon" class="modal-icon" aria-hidden="true"></div>
+            <div class="modal-body">
+                <h3 id="modal-title"></h3>
+                <p id="modal-message"></p>
+            </div>
+            <div class="modal-actions">
+                <button id="modal-cancel-btn" class="btn-secondary">Cancel</button>
+                <button id="modal-confirm-btn" class="btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="firebase-init.js"></script>
     <script src="app.js" defer></script>
 </body>
