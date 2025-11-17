@@ -35,6 +35,7 @@ let query = null;
 let orderBy = null;
 let limit = null;
 let onSnapshot = null;
+let getDocs = null;
 
 let messagesCollection = null;
 let loginsCollection = null;
@@ -49,6 +50,7 @@ function assignFirebaseServices(services = {}) {
   orderBy = services.orderBy || null;
   limit = services.limit || null;
   onSnapshot = services.onSnapshot || null;
+  getDocs = services.getDocs || null;
 }
 
 async function ensureFirebaseServices() {
@@ -186,9 +188,14 @@ if (chatScreen) {
     chatScreenObserver.observe(chatScreen, { attributes: true, attributeFilter: ['class'] });
 }
 
-function setupFirebaseHistoryListener() {
+async function loadFirebaseHistory() {
     if (!messagesCollection) {
-        console.error('[Firestore] Cannot setup listener - messagesCollection not initialized');
+        console.error('[Firestore] Cannot load history - messagesCollection not initialized');
+        return;
+    }
+
+    if (!query || !orderBy || !limit || !getDocs) {
+        console.error('[Firestore] Firestore helpers missing; cannot load history');
         return;
     }
     
@@ -198,44 +205,28 @@ function setupFirebaseHistoryListener() {
             orderBy('timestamp', 'asc'), 
             limit(200)
         );
-        
-        const unsubscribe = onSnapshot(historyQuery, 
-            (snapshot) => {
-                console.log('[Firestore] Snapshot received with', snapshot.docs.length, 'documents');
-                
-                snapshot.docChanges().forEach((change) => {
-                    if (change.type === 'added') {
-                        const data = change.doc.data();
-                        console.log('[Firestore] New message from history:', data);
-                        
-                        handleMessage({
-                            type: 'message',
-                            id: change.doc.id,
-                            author: data.author,
-                            content: data.content,
-                            image: data.image || null,
-                            replyTo: data.replyTo || null,
-                            replyToAuthor: data.replyToAuthor || null,
-                            replyToContent: data.replyToContent || null,
-                            timestamp: (data.timestamp && data.timestamp.seconds) 
-                                ? data.timestamp.seconds 
-                                : Date.now() / 1000,
-                        });
-                    }
-                });
-            },
-            (error) => {
-                console.error('[Firestore] Listener error:', error);
-                console.error('[Firestore] Error code:', error.code);
-                console.error('[Firestore] Error message:', error.message);
-            }
-        );
-        
-        console.log('[Firestore] Listener setup complete');
-        window.firestoreUnsubscribe = unsubscribe;
-        
+
+        const snapshot = await getDocs(historyQuery);
+        console.log('[Firestore] History snapshot received with', snapshot.docs.length, 'documents');
+
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            handleMessage({
+                type: 'message',
+                id: doc.id,
+                author: data.author,
+                content: data.content,
+                image: data.image || null,
+                replyTo: data.replyTo || null,
+                replyToAuthor: data.replyToAuthor || null,
+                replyToContent: data.replyToContent || null,
+                timestamp: (data.timestamp && data.timestamp.seconds) 
+                    ? data.timestamp.seconds 
+                    : Date.now() / 1000,
+            });
+        });
     } catch (error) {
-        console.error('[Firestore] Failed to setup listener:', error);
+        console.error('[Firestore] Failed to load history:', error);
     }
 }
 
@@ -355,7 +346,7 @@ async function joinChat() {
                 const collectionsReady = await initFirebaseCollections(joinCode);
                 if (collectionsReady) {
                     await logFirebaseLogin(username, joinCode);
-                    setupFirebaseHistoryListener();
+                    await loadFirebaseHistory();
                 }
             } catch (error) {
                 console.error('[Firestore] Failed to initialize Firebase:', error);
@@ -426,11 +417,7 @@ async function joinChat() {
         if (!chatScreen.classList.contains('hidden')) {
             addSystemMessage('Disconnected from server');
         }
-        
-        if (window.firestoreUnsubscribe) {
-            window.firestoreUnsubscribe();
-            window.firestoreUnsubscribe = null;
-        }
+
     };
 }
 
@@ -1048,12 +1035,6 @@ function leaveChat() {
         ws.send('/quit');
         ws.close();
     }
-    
-    if (window.firestoreUnsubscribe) {
-        window.firestoreUnsubscribe();
-        window.firestoreUnsubscribe = null;
-    }
-    
     messagesDiv.innerHTML = '';
     usernameInput.value = '';
     messageInput.value = '';

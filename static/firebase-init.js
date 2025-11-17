@@ -7,7 +7,8 @@ import {
     query,
     orderBy,
     limit,
-    onSnapshot
+    onSnapshot,
+    getDocs
 } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js';
 import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js';
 
@@ -48,6 +49,7 @@ async function bootstrapFirebase() {
         orderBy,
         limit,
         onSnapshot,
+        getDocs,
     };
 
     window.firebaseServices = services;
