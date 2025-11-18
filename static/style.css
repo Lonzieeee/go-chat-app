@@ -1163,6 +1163,50 @@ body {
 }
 
 /* Responsive Design */
+@media (max-width: 1024px) {
+    body {
+        padding: 16px;
+    }
+
+    .screen {
+        padding: 24px;
+    }
+
+    .login-box {
+        width: min(100%, 440px);
+        padding: 48px 36px;
+        border-radius: 22px;
+    }
+
+    .features {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 14px;
+    }
+
+    .chat-wrapper {
+        width: min(100%, 720px);
+        height: calc(100vh - 32px);
+        max-height: none;
+        border-radius: 22px;
+    }
+
+    .chat-container {
+        padding: 18px;
+    }
+
+    .messages {
+        gap: 14px;
+    }
+
+    .input-container {
+        padding: 16px 18px;
+    }
+
+    .input-row {
+        gap: 10px;
+    }
+}
+
 @media (max-width: 768px) {
     body {
         /* Safe area support for notched devices */
