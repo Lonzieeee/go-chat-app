@@ -11,33 +11,54 @@ import (
 	"time"
 )
 
-const (
-	validJoinCode     = "MYGROUP123"
-	maxMessageHistory = 200
+const maxMessageHistory = 200
+
+var (
+	defaultJoinCode = "MYGROUP123"
+	validJoinCodes  = map[string]string{
+		"MYGROUP123": "Main Room",
+		"MYGROUP456": "Team Room",
+	}
 )
+
+func sanitizeJoinCode(code string) string {
+	code = strings.TrimSpace(strings.ToUpper(code))
+	if code == "" {
+		return defaultJoinCode
+	}
+	return code
+}
+
+func isAllowedJoinCode(code string) bool {
+	_, ok := validJoinCodes[code]
+	return ok
+}
 
 type Message struct {
 	ID             string           `json:"id"`
 	Type           string           `json:"type"` // "message", "system", "edit", "read_receipt"
 	Author         string           `json:"author,omitempty"`
 	Content        string           `json:"content"`
+	Image          string           `json:"image,omitempty"`
 	Timestamp      int64            `json:"timestamp"`
 	ReplyTo        string           `json:"replyTo,omitempty"` // ID of message being replied to
 	Edited         bool             `json:"edited,omitempty"`
-	ReadBy         map[string]int64 `json:"readBy,omitempty"` // username -> timestamp
+	ReadBy         map[string]int64 `json:"readBy,omitempty"`         // username -> timestamp
 	ReplyToContent string           `json:"replyToContent,omitempty"` // Content of replied message
 	ReplyToAuthor  string           `json:"replyToAuthor,omitempty"`  // Author of replied message
+	RoomCode       string           `json:"roomCode,omitempty"`
 }
 type Client struct {
 	conn     net.Conn
 	name     string
 	outgoing chan string
+	roomCode string
 }
 
 type ChatServer struct {
 	clients  map[*Client]bool
 	messages map[string]*Message // Store messages by ID for replies and read receipts
-	history  []*Message
+	history  map[string][]*Message
 	mu       sync.RWMutex
 	join     chan *Client
 	leave    chan *Client
@@ -51,7 +72,7 @@ func NewChatServer() *ChatServer {
 	return &ChatServer{
 		clients:  make(map[*Client]bool),
 		messages: make(map[string]*Message),
-		history:  make([]*Message, 0, maxMessageHistory),
+		history:  make(map[string][]*Message),
 		join:     make(chan *Client),
 		leave:    make(chan *Client),
 		message:  make(chan *Message, 10),
@@ -67,9 +88,9 @@ func (s *ChatServer) Start() {
 			s.mu.Lock()
 			s.clients[client] = true
 			s.mu.Unlock()
-			log.Printf("%s joined the chat. Total clients: %d", client.name, len(s.clients))
+			log.Printf("%s joined the chat. Room: %s. Total clients: %d", client.name, client.roomCode, len(s.clients))
 			s.sendHistoryToClient(client)
-			s.broadcastStats()
+			s.broadcastStats(client.roomCode)
 
 		case client := <-s.leave:
 			s.mu.Lock()
@@ -81,18 +102,19 @@ func (s *ChatServer) Start() {
 				}
 			}
 			s.mu.Unlock()
-			log.Printf("%s left the chat. Total clients: %d", client.name, len(s.clients))
-			s.broadcastStats()
+			log.Printf("%s left the chat. Room: %s. Total clients: %d", client.name, client.roomCode, len(s.clients))
+			s.broadcastStats(client.roomCode)
 
 		case msg := <-s.message:
 			// Store message if it's a regular message
 			if msg.Type == "message" {
 				s.mu.Lock()
 				s.messages[msg.ID] = msg
-				s.history = append(s.history, msg)
-				if len(s.history) > maxMessageHistory {
-					s.history = s.history[len(s.history)-maxMessageHistory:]
+				roomHistory := append(s.history[msg.RoomCode], msg)
+				if len(roomHistory) > maxMessageHistory {
+					roomHistory = roomHistory[len(roomHistory)-maxMessageHistory:]
 				}
+				s.history[msg.RoomCode] = roomHistory
 				s.mu.Unlock()
 			}
 
@@ -105,13 +127,13 @@ func (s *ChatServer) Start() {
 
 			s.mu.RLock()
 			for client := range s.clients {
-				// Check if outgoing channel is open before sending
-				if client.outgoing != nil {
-					select {
-					case client.outgoing <- string(msgJSON):
-					default:
-						// Client buffer full, skip
-					}
+				if client.roomCode != msg.RoomCode || client.outgoing == nil {
+					continue
+				}
+				select {
+				case client.outgoing <- string(msgJSON):
+				default:
+					// Client buffer full, skip
 				}
 			}
 			s.mu.RUnlock()
@@ -119,8 +141,8 @@ func (s *ChatServer) Start() {
 	}
 }
 
-// broadcastStats sends current total members and online members to all clients
-func (s *ChatServer) broadcastStats() {
+// broadcastStats sends current total members and online members to all clients in a room
+func (s *ChatServer) broadcastStats(roomCode string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -131,14 +153,19 @@ func (s *ChatServer) broadcastStats() {
 	}
 
 	memberNames := make([]string, 0, len(s.clients))
+	onlineCount := 0
 	for client := range s.clients {
+		if client.roomCode != roomCode {
+			continue
+		}
 		memberNames = append(memberNames, client.name)
+		onlineCount++
 	}
 
 	stats := map[string]interface{}{
 		"type":          "stats",
 		"totalMembers":  totalMembers,
-		"onlineMembers": len(s.clients),
+		"onlineMembers": onlineCount,
 		"memberNames":   memberNames,
 	}
 
@@ -149,24 +176,26 @@ func (s *ChatServer) broadcastStats() {
 	}
 
 	for client := range s.clients {
-		if client.outgoing != nil {
-			select {
-			case client.outgoing <- string(msgJSON):
-			default:
-				// skip if client buffer is full
-			}
+		if client.roomCode != roomCode || client.outgoing == nil {
+			continue
+		}
+		select {
+		case client.outgoing <- string(msgJSON):
+		default:
+			// skip if client buffer is full
 		}
 	}
 }
 
 func (s *ChatServer) sendHistoryToClient(client *Client) {
 	s.mu.RLock()
-	if len(s.history) == 0 {
+	roomHistory := s.history[client.roomCode]
+	if len(roomHistory) == 0 {
 		s.mu.RUnlock()
 		return
 	}
-	historyCopy := make([]*Message, len(s.history))
-	copy(historyCopy, s.history)
+	historyCopy := make([]*Message, len(roomHistory))
+	copy(historyCopy, roomHistory)
 	s.mu.RUnlock()
 
 	payload := map[string]interface{}{
@@ -212,10 +241,24 @@ func (s *ChatServer) HandleConnection(conn net.Conn) {
 		name = conn.RemoteAddr().String()
 	}
 
+	conn.Write([]byte("Enter join code (leave blank for default): "))
+	roomCode := defaultJoinCode
+	if scanner.Scan() {
+		codeInput := sanitizeJoinCode(scanner.Text())
+		if !isAllowedJoinCode(codeInput) {
+			conn.Write([]byte("Invalid join code. Connection closed.\n"))
+			return
+		}
+		roomCode = codeInput
+	} else {
+		return
+	}
+
 	client := &Client{
 		conn:     conn,
 		name:     name,
 		outgoing: make(chan string, 10),
+		roomCode: roomCode,
 	}
 
 	s.join <- client
@@ -226,6 +269,7 @@ func (s *ChatServer) HandleConnection(conn net.Conn) {
 		Type:      "system",
 		Content:   fmt.Sprintf("%s has joined the chat", client.name),
 		Timestamp: time.Now().Unix(),
+		RoomCode:  client.roomCode,
 	}
 	s.message <- joinMsg
 
@@ -260,6 +304,7 @@ func (s *ChatServer) HandleConnection(conn net.Conn) {
 			case "message":
 				// New message or reply
 				content, _ := messageData["content"].(string)
+				imageData, _ := messageData["image"].(string)
 				replyTo, _ := messageData["replyTo"].(string)
 
 				newMsg := &Message{
@@ -267,13 +312,15 @@ func (s *ChatServer) HandleConnection(conn net.Conn) {
 					Type:      "message",
 					Author:    client.name,
 					Content:   content,
+					Image:     imageData,
 					Timestamp: time.Now().Unix(),
 					ReadBy:    make(map[string]int64),
+					RoomCode:  client.roomCode,
 				}
 
 				if replyTo != "" {
 					s.mu.RLock()
-					if replyMsg, exists := s.messages[replyTo]; exists {
+					if replyMsg, exists := s.messages[replyTo]; exists && replyMsg.RoomCode == client.roomCode {
 						newMsg.ReplyTo = replyTo
 						newMsg.ReplyToContent = replyMsg.Content
 						newMsg.ReplyToAuthor = replyMsg.Author
@@ -289,7 +336,7 @@ func (s *ChatServer) HandleConnection(conn net.Conn) {
 				newContent, _ := messageData["content"].(string)
 
 				s.mu.Lock()
-				if origMsg, exists := s.messages[msgID]; exists && origMsg.Author == client.name {
+				if origMsg, exists := s.messages[msgID]; exists && origMsg.Author == client.name && origMsg.RoomCode == client.roomCode {
 					origMsg.Content = newContent
 					origMsg.Edited = true
 					origMsg.Timestamp = time.Now().Unix() // Update timestamp
@@ -301,6 +348,7 @@ func (s *ChatServer) HandleConnection(conn net.Conn) {
 						Content:   newContent,
 						Timestamp: origMsg.Timestamp,
 						Edited:    true,
+						RoomCode:  client.roomCode,
 					}
 					s.mu.Unlock()
 
@@ -314,13 +362,14 @@ func (s *ChatServer) HandleConnection(conn net.Conn) {
 				msgID, _ := messageData["id"].(string)
 
 				s.mu.Lock()
-				if readMsg, exists := s.messages[msgID]; exists {
+				if readMsg, exists := s.messages[msgID]; exists && readMsg.RoomCode == client.roomCode {
 					readMsg.ReadBy[client.name] = time.Now().Unix()
 
 					receiptMsg := &Message{
-						ID:     msgID,
-						Type:   "read_receipt",
-						ReadBy: readMsg.ReadBy,
+						ID:       msgID,
+						Type:     "read_receipt",
+						ReadBy:   readMsg.ReadBy,
+						RoomCode: client.roomCode,
 					}
 					s.mu.Unlock()
 
@@ -338,6 +387,7 @@ func (s *ChatServer) HandleConnection(conn net.Conn) {
 				Content:   msg,
 				Timestamp: time.Now().Unix(),
 				ReadBy:    make(map[string]int64),
+				RoomCode:  client.roomCode,
 			}
 			s.message <- newMsg
 		}
@@ -349,6 +399,7 @@ func (s *ChatServer) HandleConnection(conn net.Conn) {
 		Type:      "system",
 		Content:   fmt.Sprintf("%s has left the chat", client.name),
 		Timestamp: time.Now().Unix(),
+		RoomCode:  client.roomCode,
 	}
 	s.message <- leaveMsg
 	s.leave <- client

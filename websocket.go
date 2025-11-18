@@ -41,7 +41,7 @@ func (s *ChatServer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name := ""
-	
+
 	// Require a proper JSON join message
 	if err := json.Unmarshal(msg, &joinData); err != nil || joinData.Type != "join" {
 		log.Printf("Invalid join message from %s", r.RemoteAddr)
@@ -49,8 +49,8 @@ func (s *ChatServer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Enforce join code
-	if joinData.Code != validJoinCode {
+	roomCode := sanitizeJoinCode(joinData.Code)
+	if !isAllowedJoinCode(roomCode) {
 		log.Printf("Invalid join code from %s", r.RemoteAddr)
 		conn.WriteMessage(websocket.TextMessage, []byte("Invalid join code"))
 		return
@@ -75,16 +75,18 @@ func (s *ChatServer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		conn:     nil, // WebSocket doesn't use net.Conn
 		name:     name,
 		outgoing: make(chan string, 10),
+		roomCode: roomCode,
 	}
 
 	s.join <- client
-	
+
 	// Send join message
 	joinMsg := &Message{
 		ID:        fmt.Sprintf("sys_%d", time.Now().UnixNano()),
 		Type:      "system",
 		Content:   client.name + " has joined the chat",
 		Timestamp: time.Now().Unix(),
+		RoomCode:  client.roomCode,
 	}
 	s.message <- joinMsg
 
@@ -117,51 +119,54 @@ func (s *ChatServer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		if msg == "/quit" {
 			break
 		}
-		
+
 		// Parse message - could be regular message, edit, or read receipt
 		var messageData map[string]interface{}
 		if err := json.Unmarshal(message, &messageData); err == nil {
 			// It's a JSON message
 			msgType, _ := messageData["type"].(string)
-			
+
 			switch msgType {
 			case "message":
 				// New message or reply
 				content, _ := messageData["content"].(string)
+				imageData, _ := messageData["image"].(string)
 				replyTo, _ := messageData["replyTo"].(string)
-				
+
 				newMsg := &Message{
 					ID:        fmt.Sprintf("msg_%d_%s", time.Now().UnixNano(), client.name),
 					Type:      "message",
 					Author:    client.name,
 					Content:   content,
+					Image:     imageData,
 					Timestamp: time.Now().Unix(),
 					ReadBy:    make(map[string]int64),
+					RoomCode:  client.roomCode,
 				}
-				
+
 				if replyTo != "" {
 					s.mu.RLock()
-					if replyMsg, exists := s.messages[replyTo]; exists {
+					if replyMsg, exists := s.messages[replyTo]; exists && replyMsg.RoomCode == client.roomCode {
 						newMsg.ReplyTo = replyTo
 						newMsg.ReplyToContent = replyMsg.Content
 						newMsg.ReplyToAuthor = replyMsg.Author
 					}
 					s.mu.RUnlock()
 				}
-				
+
 				s.message <- newMsg
-				
+
 			case "edit":
 				// Edit existing message
 				msgID, _ := messageData["id"].(string)
 				newContent, _ := messageData["content"].(string)
-				
+
 				s.mu.Lock()
-				if origMsg, exists := s.messages[msgID]; exists && origMsg.Author == client.name {
+				if origMsg, exists := s.messages[msgID]; exists && origMsg.Author == client.name && origMsg.RoomCode == client.roomCode {
 					origMsg.Content = newContent
 					origMsg.Edited = true
 					origMsg.Timestamp = time.Now().Unix()
-					
+
 					editMsg := &Message{
 						ID:        msgID,
 						Type:      "edit",
@@ -169,29 +174,31 @@ func (s *ChatServer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 						Content:   newContent,
 						Timestamp: origMsg.Timestamp,
 						Edited:    true,
+						RoomCode:  client.roomCode,
 					}
 					s.mu.Unlock()
-					
+
 					s.message <- editMsg
 				} else {
 					s.mu.Unlock()
 				}
-				
+
 			case "read_receipt":
 				// Mark message as read
 				msgID, _ := messageData["id"].(string)
-				
+
 				s.mu.Lock()
-				if readMsg, exists := s.messages[msgID]; exists {
+				if readMsg, exists := s.messages[msgID]; exists && readMsg.RoomCode == client.roomCode {
 					readMsg.ReadBy[client.name] = time.Now().Unix()
-					
+
 					receiptMsg := &Message{
-						ID:     msgID,
-						Type:   "read_receipt",
-						ReadBy: readMsg.ReadBy,
+						ID:       msgID,
+						Type:     "read_receipt",
+						ReadBy:   readMsg.ReadBy,
+						RoomCode: client.roomCode,
 					}
 					s.mu.Unlock()
-					
+
 					s.message <- receiptMsg
 				} else {
 					s.mu.Unlock()
@@ -206,6 +213,7 @@ func (s *ChatServer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 				Content:   msg,
 				Timestamp: time.Now().Unix(),
 				ReadBy:    make(map[string]int64),
+				RoomCode:  client.roomCode,
 			}
 			s.message <- newMsg
 		}
@@ -217,6 +225,7 @@ func (s *ChatServer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		Type:      "system",
 		Content:   client.name + " has left the chat",
 		Timestamp: time.Now().Unix(),
+		RoomCode:  client.roomCode,
 	}
 	s.message <- leaveMsg
 	s.leave <- client

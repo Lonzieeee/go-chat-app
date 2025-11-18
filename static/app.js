@@ -446,7 +446,8 @@ async function logFirebaseLogin(username, roomCode) {
 
 async function joinChat() {
     const name = usernameInput.value.trim();
-    const code = joinCodeInput ? joinCodeInput.value.trim() : '';
+    const rawCode = joinCodeInput ? joinCodeInput.value.trim() : '';
+    const code = rawCode.toUpperCase();
     if (name === '') {
         showInfoModal({
             title: 'Name required',
